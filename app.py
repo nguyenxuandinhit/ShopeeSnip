@@ -493,8 +493,12 @@ class VoucherSniperApp(ctk.CTk):
 
         if push_to_top:
             children = self.grid_container.winfo_children()
-            if children:
-                row_frame.pack(fill="x", padx=5, pady=2, before=children[0])
+            packed_children = [c for c in children if c.winfo_manager() == 'pack']
+            if packed_children:
+                try:
+                    row_frame.pack(fill="x", padx=5, pady=2, before=packed_children[0])
+                except Exception:
+                    row_frame.pack(fill="x", padx=5, pady=2)
             else:
                 row_frame.pack(fill="x", padx=5, pady=2)
         else:
@@ -549,11 +553,25 @@ class VoucherSniperApp(ctk.CTk):
         voucher_input_selector = 'input[placeholder*="voucher"], input[placeholder*="Voucher"], input[placeholder*="mã"], input[type="text"]'
         
         async with async_playwright() as p:
-            self.log_to_ui("🔌 Đang liên thông kết nối vào cổng Chrome Debug ông đang mở sẵn (127.0.0.1:9222)...")
+            self.log_to_ui("🔌 Đang kiểm tra kết nối Chrome Debug (127.0.0.1:9222)...")
             try:
-                # Móc trực tiếp qua cổng CDP, KHÔNG gọi lệnh subprocess khởi tạo profile rác
                 self.browser = await p.chromium.connect_over_cdp("http://127.0.0.1:9222")
-                
+            except Exception:
+                self.log_to_ui("⚙️ Chrome chưa mở, hệ thống đang tự động khởi chạy Chrome Profile Chuẩn...")
+                try:
+                    subprocess.Popen([
+                        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                        "--remote-debugging-port=9222",
+                        r"--user-data-dir=C:\ShopeeBotProfile"
+                    ])
+                    await asyncio.sleep(3)
+                    self.browser = await p.chromium.connect_over_cdp("http://127.0.0.1:9222")
+                except Exception as e2:
+                    self.log_to_ui(f"❌ THẤT BẠI: Không thể tự động mở Chrome. Lỗi: {e2}")
+                    self.after(0, self.stop_bot)
+                    return
+                    
+            try:
                 if self.browser.contexts:
                     self.context = self.browser.contexts[0]
                 else:
@@ -584,9 +602,9 @@ class VoucherSniperApp(ctk.CTk):
                         page = await self.context.new_page()
                         await page.goto('https://shopee.vn/user/voucher-wallet?sort=1&type=0', wait_until='networkidle')
                 
-                self.log_to_ui("🔥 LIÊN THÔNG CHROME ĐANG DÙNG THÀNH CÔNG - HỆ THỐNG READY 🔥")
+                self.log_to_ui("🔥 TỰ ĐỘNG LIÊN THÔNG CHROME THÀNH CÔNG - HỆ THỐNG READY 🔥")
             except Exception as e:
-                self.log_to_ui(f"❌ THẤT BẠI: Không tìm thấy Chrome Debug! Vui lòng cài cờ --remote-debugging-port=9222 vào shortcut Chrome. Lỗi: {e}")
+                self.log_to_ui(f"❌ Lỗi thiết lập tab Chrome: {e}")
                 self.after(0, self.stop_bot)
                 return
 
@@ -815,6 +833,11 @@ class LoginWindow(ctk.CTk):
 
     def open_main_app(self):
         self.destroy()
+        try:
+            import subprocess
+            subprocess.Popen("Mo_Chrome_ShopeeBot.bat", shell=True)
+        except Exception:
+            pass
         main_app = VoucherSniperApp()
         main_app.mainloop()
 
